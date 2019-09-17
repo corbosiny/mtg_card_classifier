@@ -3,6 +3,8 @@ import numpy as np
 
 import os, sys
 
+from CardCataloger import CardCataloger
+
 CARD_MAX_THRESHOLD = 15000
 CARD_MIN_THRESHOLD = 3950
 
@@ -18,7 +20,7 @@ MIN_MATCH_COUNT = 4
 class CardClassifier():
 
     def __init__(self):
-        pass
+        self.cataloger = CardCataloger()
 
     def startVideo(self):
         self.cap = cv2.VideoCapture(0)
@@ -136,18 +138,8 @@ class CardClassifier():
         print('Comparing then cataloguing cards..')
         matches = self.compare()
         names = [elem[0] for elem in matches]
-        print('Matching cards with prices..')
-        prices = self.findCardPrices(names)
-        print('Finished Matching prices')
-        print('Writing cards to catalogue..')
-        self.appendCardsToCatalogue(names, prices)
+        self.cataloger.logCards(names)
         print('Finished writing cards to catalogue')
-
-    def findCardPrices(self, names):
-        pass
-
-    def appendCardsToCatalogue(names, prices):
-        pass
 
     def isolateCardImage(self, card, frame, ar):
         # create a min area rectangle from our contour

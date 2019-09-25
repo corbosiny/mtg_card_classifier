@@ -5,8 +5,15 @@ import os, sys
 
 from CardCataloger import CardCataloger
 
-CARD_MAX_THRESHOLD = 15000
-CARD_MIN_THRESHOLD = 3950
+VIDEO_INPUT = 1
+
+SHARPENING_KERNEL = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+
+SIGMA = .33
+DILATION_KERNEL = np.ones((5,5), np.uint8)
+
+CARD_MAX_THRESHOLD = 75000
+CARD_MIN_THRESHOLD = 18000
 
 MIN_ASPECT_RATIO = 1.0
 MAX_ASPECT_RATIO = 2.3
@@ -15,7 +22,7 @@ FLANN_INDEX_KDTREE = 0
 INDEX_PARAMS  = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
 SEARCH_PARAMS = dict(checks = 50)
 
-MIN_MATCH_COUNT = 4
+MIN_MATCH_COUNT = 15
 
 class CardClassifier():
 
@@ -23,7 +30,7 @@ class CardClassifier():
         self.cataloger = CardCataloger()
 
     def startVideo(self):
-        self.cap = cv2.VideoCapture(0)
+        self.cap = cv2.VideoCapture(VIDEO_INPUT)
         while True:
             ret, frame = self.cap.read()
             if ret == False: self.quit()
@@ -41,10 +48,25 @@ class CardClassifier():
         return self.cardContours
 
     def detectAllContours(self, frame):
+        #frame = self.sharpenImage(frame)
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        #edgedImage = self.findAllEdges(gray)
+        #---- apply dilation to help improve edge detection----
+        #dilatedImage = cv2.dilate(thresh, DILATION_KERNEL, iterations=1)
+        #_, contours, hierarchy = cv2.findContours(dilatedImage, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         _, thresh = cv2.threshold(gray, 130, 255, cv2.THRESH_BINARY)
         _, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
         return contours
+
+    def sharpenImage(self, img):
+        return cv2.filter2D(img, -1, SHARPENING_KERNEL)
+
+    def findAllEdges(self, img):
+        imageMedian = np.median(img)
+        lowerThreshold = int(max(0, (1.0 - SIGMA) * imageMedian))      
+        upperThreshold = int(min(255, (1.0 + SIGMA) * imageMedian))
+        #---- apply automatic Canny edge detection using the computed median----
+        return cv2.Canny(img, lowerThreshold, upperThreshold)
 
     def filterOutCardContours(self, contours):
         cards = []
@@ -138,8 +160,11 @@ class CardClassifier():
         print('Comparing then cataloguing cards..')
         matches = self.compare()
         names = [elem[0] for elem in matches]
-        self.cataloger.logCards(names)
-        print('Finished writing cards to catalogue')
+        if len(names) == 0:
+            print('No recognizable cards to catalogue..')
+        else:
+            self.cataloger.logCards(names)
+            print('Finished writing cards to catalogue')
 
     def isolateCardImage(self, card, frame, ar):
         # create a min area rectangle from our contour

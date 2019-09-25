@@ -21,9 +21,11 @@ class CardCataloger():
         cards = []
         for name in names:
             print('Finding card statistics {0}..'.format(name))
-            rarity, price, cardSet = self.getCardStats(name)
-            cards.append([name, rarity, price, cardSet])
-
+            try:
+                rarity, price, cardSet = self.getCardStats(name)
+                cards.append([name, rarity, price, cardSet])
+            except Exception as e:
+                print('Could not find card information on card {0}'.format(name))
         if not os.path.exists(COLLECTION_FILE_NAME):
             self.initCollectionFile()
             
@@ -42,6 +44,9 @@ class CardCataloger():
                 setOrigin = row[SET_COLUMN].value
                 print('Set: {0}'.format(setOrigin))
                 return rarity, price, setOrigin
+
+##    def getCardStats(self):
+##        pass # Enter code to connect to web server
 
     def initCollectionFile(self):
         with open(COLLECTION_FILE_NAME, 'w+', newline= '') as file:

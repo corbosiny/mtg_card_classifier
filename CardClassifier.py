@@ -1,28 +1,40 @@
-import cv2
+### Python library imports
+import cv2, os, sys
 import numpy as np
 
-import os, sys
-
+### Custom library imports
 from CardCataloger import CardCataloger
 
-VIDEO_INPUT = 1
 
-SHARPENING_KERNEL = np.array([[-1,-1,-1], [-1,9,-1], [-1,-1,-1]])
+VIDEO_INPUT = 0 # What camera we will pull video input from
 
-SIGMA = .33
-DILATION_KERNEL = np.ones((5,5), np.uint8)
+### Defines for edge detection parameters 
+THRESHOLDING_CUTOFF = 130
+ESTIMATION_ACCURACY = .04
 
-CARD_MAX_THRESHOLD = 75000
-CARD_MIN_THRESHOLD = 18000
+### Min and max area values for possible cards detected
+CARD_MAX_AREA_THRESHOLD = 75000
+CARD_MIN_AREA_THRESHOLD = 18000
 
+### Min and max aspect ratios a cards dimensions could take on
 MIN_ASPECT_RATIO = 1.0
 MAX_ASPECT_RATIO = 2.3
 
+# Defines for the appearance of the contour boxes
+CONTOUR_COLOR     = (0, 255, 0)
+CONTOUR_THICKNESS = 2
+
+### Surf algorithm parameters
 FLANN_INDEX_KDTREE = 0
 INDEX_PARAMS  = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
 SEARCH_PARAMS = dict(checks = 50)
+MIN_MATCH_COUNT = 15   # Need a minimum of 15 key point matches to count as a possible match
 
-MIN_MATCH_COUNT = 15
+### Input command keys
+QUIT_KEY    = 'q'
+COMPARE_KEY = 'c'
+CATALOG_KEY = 'l'
+
 
 class CardClassifier():
 
@@ -36,7 +48,7 @@ class CardClassifier():
             if ret == False: self.quit()
 
             cardContours = self.detectCardContours(frame)
-            self.drawCardContours(frame, cardContours)
+            self.drawCardContoursOnFrame(frame, cardContours)
             cv2.imshow('frame', frame)
             
             self.checkForKeyPress()
@@ -44,61 +56,52 @@ class CardClassifier():
 
     def detectCardContours(self, frame):
         contours = self.detectAllContours(frame)
-        self.cardContours = self.filterOutCardContours(contours)
-        return self.cardContours
+        cardContours = self.extractOnlyCardContours(contours)
+        return cardContours
 
     def detectAllContours(self, frame):
-        #frame = self.sharpenImage(frame)
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        #edgedImage = self.findAllEdges(gray)
-        #---- apply dilation to help improve edge detection----
-        #dilatedImage = cv2.dilate(thresh, DILATION_KERNEL, iterations=1)
-        #_, contours, hierarchy = cv2.findContours(dilatedImage, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
-        _, thresh = cv2.threshold(gray, 130, 255, cv2.THRESH_BINARY)
-        _, contours, hierarchy = cv2.findContours(thresh, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)
+        grayImg = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        _, thresholdedImg = cv2.threshold(grayImg, THRESHOLDING_CUTOFF, 255, cv2.THRESH_BINARY)            # 255 means anyone above the cutoff is pushed up to be white
+        _, contours, heirarchy = cv2.findContours(thresholdedImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)  # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cutt off internal art or text box contours
+                                                                                                           # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
+                                                                                                           # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
         return contours
 
-    def sharpenImage(self, img):
-        return cv2.filter2D(img, -1, SHARPENING_KERNEL)
-
-    def findAllEdges(self, img):
-        imageMedian = np.median(img)
-        lowerThreshold = int(max(0, (1.0 - SIGMA) * imageMedian))      
-        upperThreshold = int(min(255, (1.0 + SIGMA) * imageMedian))
-        #---- apply automatic Canny edge detection using the computed median----
-        return cv2.Canny(img, lowerThreshold, upperThreshold)
-
-    def filterOutCardContours(self, contours):
+    def extractOnlyCardContours(self, contours):
         cards = []
-        for contour in contours:
-            arcLength = cv2.arcLength(contour, True)
-            verticies = cv2.approxPolyDP(contour, 0.04 * arcLength, True)
-            x, y, w, h = cv2.boundingRect(verticies)
-            ar = w / float(h)
-            if cv2.contourArea(contour) > CARD_MIN_THRESHOLD and cv2.contourArea(contour) < CARD_MAX_THRESHOLD and len(verticies) == 4:
-                cards.append([contour, ar])
+        for contour in contours:        
+            arcLength = cv2.arcLength(contour, True)                                         # True here and in the next line specifys to only find closed contours
+            verticies = cv2.approxPolyDP(contour, ESTIMATION_ACCURACY * arcLength, True)     # Estimation accuracy is how lenient we let the approximator be in finding the bounding rectangle
+            if self.isCardContour(contour, verticies):
+                cards.append(contour)
         return cards
+
+    def isCardContour(self, contour, verticies):
+        startX, startY, width, height = cv2.boundingRect(verticies)
+        aspectRatio = width / float(height)
+        return (cv2.contourArea(contour) > CARD_MIN_AREA_THRESHOLD and cv2.contourArea(contour) < CARD_MAX_AREA_THRESHOLD and len(verticies) == 4)
     
-    def drawCardContours(self, frame, cards):
-        self.isolatedCardImages = []
-        for card, ar in cards:
-            cv2.drawContours(frame, [card], -1, (0, 255, 0), 2)
-            self.isolatedCardImages.append(self.isolateCardImage(card, frame, ar))
+    def drawCardContoursOnFrame(self, frame, cards):
+        cv2.drawContours(frame, cards, -1, CONTOUR_COLOR, CONTOUR_THICKNESS)               # -1 means to draw all card contours
+        self.isolatedCardImages = [self.isolateCardImage(cardContour, frame) for cardContour in cards] 
             
     def checkForKeyPress(self):
         keyVal = cv2.waitKey(1)
 
-        if keyVal == ord('q'):
+        if keyVal == ord(QUIT_KEY):
             self.quit()
-        elif keyVal == ord('c'):
+        elif keyVal == ord(COMPARE_KEY):
             self.compare()
-        elif keyVal == ord('l'):
+        elif keyVal == ord(CATALOG_KEY):
             self.catalogue()
 
 
     def quit(self):
+        print('Releasing camera..')
         self.cap.release()
+        print('Destroying all windows..')
         cv2.destroyAllWindows()
+        print('Exiting..')
         sys.exit('Exiting program')
 
 
@@ -166,7 +169,7 @@ class CardClassifier():
             self.cataloger.logCards(names)
             print('Finished writing cards to catalogue')
 
-    def isolateCardImage(self, card, frame, ar):
+    def isolateCardImage(self, card, frame):
         # create a min area rectangle from our contour
         _rect = cv2.minAreaRect(card)
         box = cv2.boxPoints(_rect)

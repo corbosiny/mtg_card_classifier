@@ -153,12 +153,8 @@ class CardClassifier():
         print('Displaying best match for {}..'.format(nameOfCard))
         src_pts = np.float32([ testKeyPoints[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
         dst_pts = np.float32([ keyPoints[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
-
-        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
+        M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC, 5.0)
         matchesMask = mask.ravel().tolist()
-
-        height, width, _ = capturedImage.shape
-        pts = np.float32([ [0, 0],[0, height - 1],[width - 1, height - 1],[width - 1,0] ]).reshape(-1,1,2)
 
         draw_params = dict(matchColor= (0,255,0), singlePointColor= None, matchesMask= matchesMask, flags= 2)
         imgOfMatches = cv2.drawMatches(capturedImage, testKeyPoints, bestCardImage, keyPoints, goodMatches, None, **draw_params)

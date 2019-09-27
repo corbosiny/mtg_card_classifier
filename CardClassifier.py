@@ -6,7 +6,7 @@ import numpy as np
 from CardCataloger import CardCataloger
 
 
-VIDEO_INPUT = 0 # What camera we will pull video input from
+VIDEO_INPUT = 1 # What camera we will pull video input from
 
 ### Defines for edge detection parameters 
 THRESHOLDING_CUTOFF = 130
@@ -28,18 +28,19 @@ CONTOUR_THICKNESS = 2
 FLANN_INDEX_KDTREE = 0
 INDEX_PARAMS  = dict(algorithm = FLANN_INDEX_KDTREE, trees = 5)
 SEARCH_PARAMS = dict(checks = 50)
-MIN_MATCH_COUNT = 15   # Need a minimum of 15 key point matches to count as a possible match
+MIN_MATCH_COUNT = 30   # Need a minimum of 15 key point matches to count as a possible match
 
 ### Input command keys
-QUIT_KEY    = 'q'
-COMPARE_KEY = 'c'
-CATALOG_KEY = 'l'
-
+QUIT_KEY         = 'q'
+COMPARE_KEY      = 'c'
+CATALOG_KEY      = 'g'
+CLEAR_WINDOW_KEY = 'l'
 
 class CardClassifier():
 
     def __init__(self):
         self.cataloger = CardCataloger()
+        self.openWindows = []
 
     def startVideo(self):
         self.cap = cv2.VideoCapture(VIDEO_INPUT)
@@ -91,9 +92,13 @@ class CardClassifier():
         if keyVal == ord(QUIT_KEY):
             self.quit()
         elif keyVal == ord(COMPARE_KEY):
+            self.clearAllExtraWindows()
             self.compare()
         elif keyVal == ord(CATALOG_KEY):
+            self.clearAllExtraWindows()
             self.catalogue()
+        elif keyVal == ord(CLEAR_WINDOW_KEY):
+            self.clearAllExtraWindows()
 
 
     def quit(self):
@@ -104,6 +109,9 @@ class CardClassifier():
         print('Exiting..')
         sys.exit('Exiting program')
 
+    def clearAllExtraWindows(self):
+        for window in self.openWindows:
+            cv2.destroyWindow(window)
 
     def compare(self):
         print('Comparing detected cards to database..')
@@ -114,50 +122,48 @@ class CardClassifier():
         print('Finished comparing cards')
         matches = [match for match in matches if match[0] is not None]
         return matches
-
-    def findImageMatch(self, image, maxWidth, maxHeight):
+            
+    def findImageMatch(self, capturedImage, maxWidth, maxHeight):
         surf = cv2.xfeatures2d.SURF_create()
-        testKP, testDES = surf.detectAndCompute(image, None)
+        flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
+        testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
         testImages = [im for im in os.listdir(os.getcwd()) if '.png' in im or '.jpg' in im]
-        highestMatches = 0
-        bestCard, name = None, None
-        bestGood, bestKP, = None, None
+        bestCardImage, cardName, bestKeyPoints, bestSetofMatches = None, None, None, []
         
         for testIMG in testImages:
             img = cv2.imread(testIMG, 0)
-            kp, des = surf.detectAndCompute(img, None)
-            flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
-            matches = flann.knnMatch(testDES,des,k=2)
-
+            keyPoints, descriptions = surf.detectAndCompute(img, None)
+            matches = flann.knnMatch(testDescriptions, descriptions,k=2)
             # store all the good matches as per Lowe's ratio test.
-            good = [m for m,n in matches if m.distance < 0.7*n.distance]
-            if len(good) >= MIN_MATCH_COUNT and len(good) > highestMatches:
-                highestMatches = len(good)
-                bestCard = img
-                name = testIMG.split('.')[0]
-                bestKP = kp
-                bestGood = good
-                print("Enough matches are found in %s - %d/%d" % (testIMG,len(good),MIN_MATCH_COUNT))
+            goodMatches = [m for m,n in matches if m.distance < 0.7*n.distance]
 
-        if bestCard is not None: self.displayMatch(name, image, bestCard, testKP, bestKP, bestGood)
+            if len(goodMatches) >= MIN_MATCH_COUNT and len(goodMatches) > len(bestSetofMatches):
+                bestCardImage = img
+                cardName = testIMG.split('.')[0]
+                bestKeyPoints = keyPoints
+                bestSetofMatches = goodMatches
+                print("Enough matches are found in %s - %d/%d" % (testIMG, len(goodMatches), MIN_MATCH_COUNT))
+
+        if bestCardImage is not None: self.displayMatch(cardName, capturedImage, bestCardImage, testKeyPoints, bestKeyPoints, bestSetofMatches)
         else: print("No good matches")
         
-        return name, bestCard
+        return cardName, bestCardImage
 
-    def displayMatch(self, name, image, bestCard, testKP, kp, good):
-        print('Displaying best match for {}..'.format(name))
-        src_pts = np.float32([ testKP[m.queryIdx].pt for m in good ]).reshape(-1,1,2)
-        dst_pts = np.float32([ kp[m.trainIdx].pt for m in good ]).reshape(-1,1,2)
+    def displayMatch(self, nameOfCard, capturedImage, bestCardImage, testKeyPoints, keyPoints, goodMatches):
+        print('Displaying best match for {}..'.format(nameOfCard))
+        src_pts = np.float32([ testKeyPoints[m.queryIdx].pt for m in goodMatches ]).reshape(-1,1,2)
+        dst_pts = np.float32([ keyPoints[m.trainIdx].pt for m in goodMatches ]).reshape(-1,1,2)
 
         M, mask = cv2.findHomography(src_pts, dst_pts, cv2.RANSAC,5.0)
         matchesMask = mask.ravel().tolist()
 
-        h,w, _ = image.shape
-        pts = np.float32([ [0,0],[0,h-1],[w-1,h-1],[w-1,0] ]).reshape(-1,1,2)
+        height, width, _ = capturedImage.shape
+        pts = np.float32([ [0, 0],[0, height - 1],[width - 1, height - 1],[width - 1,0] ]).reshape(-1,1,2)
 
-        draw_params = dict(matchColor = (0,255,0), singlePointColor = None, matchesMask = matchesMask, flags = 2)
-        img3 = cv2.drawMatches(image,testKP,bestCard,kp,good,None,**draw_params)
-        cv2.imshow('match for {}'.format(name), img3)
+        draw_params = dict(matchColor= (0,255,0), singlePointColor= None, matchesMask= matchesMask, flags= 2)
+        imgOfMatches = cv2.drawMatches(capturedImage, testKeyPoints, bestCardImage, keyPoints, goodMatches, None, **draw_params)
+        cv2.imshow('match for {}'.format(nameOfCard), imgOfMatches)
+        self.openWindows.append('match for {}'.format(nameOfCard))
     
     def catalogue(self):
         print('Comparing then cataloguing cards..')
@@ -169,9 +175,9 @@ class CardClassifier():
             self.cataloger.logCards(names)
             print('Finished writing cards to catalogue')
 
-    def isolateCardImage(self, card, frame):
+    def isolateCardImage(self, cardContour, frame):
         # create a min area rectangle from our contour
-        _rect = cv2.minAreaRect(card)
+        _rect = cv2.minAreaRect(cardContour)
         box = cv2.boxPoints(_rect)
         box = np.int0(box)
 
@@ -204,10 +210,10 @@ class CardClassifier():
             [maxWidth - 1, maxHeight - 1],
             [0, maxHeight - 1]], dtype = "float32")
 
-        M = cv2.getPerspectiveTransform(rect, dst)
+        transformationMatrix = cv2.getPerspectiveTransform(rect, dst)
         frameCopy = frame.copy()
-        warped = cv2.warpPerspective(frameCopy, M, (maxWidth, maxHeight))
-        return warped, maxWidth, maxHeight
+        warpedImg = cv2.warpPerspective(frameCopy, transformationMatrix, (maxWidth, maxHeight))
+        return warpedImg, maxWidth, maxHeight
     
 if __name__ == "__main__":
     classifier = CardClassifier()

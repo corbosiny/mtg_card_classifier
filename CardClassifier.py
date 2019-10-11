@@ -6,7 +6,7 @@ import numpy as np
 from CardCataloger import CardCataloger
 
 
-VIDEO_INPUT = 1 # What camera we will pull video input from
+VIDEO_INPUT = 0 # What camera we will pull video input from
 
 ### Defines for edge detection parameters 
 THRESHOLDING_CUTOFF = 130
@@ -62,10 +62,16 @@ class CardClassifier():
 
     def detectAllContours(self, frame):
         grayImg = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, thresholdedImg = cv2.threshold(grayImg, THRESHOLDING_CUTOFF, 255, cv2.THRESH_BINARY)            # 255 means anyone above the cutoff is pushed up to be white
-        _, contours, heirarchy = cv2.findContours(thresholdedImg, cv2.RETR_TREE, cv2.CHAIN_APPROX_SIMPLE)  # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cutt off internal art or text box contours
-                                                                                                           # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
-                                                                                                           # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
+        _, thresholdedImg = cv2.threshold(grayImg, THRESHOLDING_CUTOFF, 255, cv2.THRESH_BINARY)                # 255 means anyone above the cutoff is pushed up to be white
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,10))
+        cv2.imshow('thresholed', thresholdedImg)
+        filteredImg = thresholdedImg
+        filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_OPEN, kernel)
+        filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_CLOSE, kernel)
+        cv2.imshow('filtered', filteredImg)
+        _, contours, heirarchy = cv2.findContours(filteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
+                                                                                                               # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
+                                                                                                               # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
         return contours
 
     def extractOnlyCardContours(self, contours):
@@ -83,8 +89,9 @@ class CardClassifier():
         return (cv2.contourArea(contour) > CARD_MIN_AREA_THRESHOLD and cv2.contourArea(contour) < CARD_MAX_AREA_THRESHOLD and len(verticies) == 4)
     
     def drawCardContoursOnFrame(self, frame, cards):
-        cv2.drawContours(frame, cards, -1, CONTOUR_COLOR, CONTOUR_THICKNESS)               # -1 means to draw all card contours
+        cv2.drawContours(frame, cards, -1, CONTOUR_COLOR, CONTOUR_THICKNESS)                 # -1 means to draw all card contours
         self.isolatedCardImages = [self.isolateCardImage(cardContour, frame) for cardContour in cards] 
+
             
     def checkForKeyPress(self):
         keyVal = cv2.waitKey(1)

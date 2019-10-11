@@ -68,7 +68,11 @@ class CardClassifier():
         filteredImg = thresholdedImg
         filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_OPEN, kernel)
         filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_CLOSE, kernel)
+        edges = cv2.Canny(frame,100,200)
+        edgesFiltered = cv2.Canny(filteredImg,100,200)
         cv2.imshow('filtered', filteredImg)
+        cv2.imshow('canny', edges)
+        cv2.imshow('cannyFiltered', edgesFiltered)
         _, contours, heirarchy = cv2.findContours(filteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
                                                                                                                # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
                                                                                                                # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory

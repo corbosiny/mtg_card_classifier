@@ -31,19 +31,24 @@ SEARCH_PARAMS = dict(checks = 50)
 MIN_MATCH_COUNT = 30   # Need a minimum of 15 key point matches to count as a possible match
 
 ### Input command keys
-QUIT_KEY         = 'q'
-COMPARE_KEY      = 'c'
-CATALOG_KEY      = 'g'
-CLEAR_WINDOW_KEY = 'l'
+QUIT_KEY           = 'q'
+CLEAR_OVERLAY_KEY  = 'o'
+COMPARE_KEY        = 'c'
+CATALOG_KEY        = 'g'
+CLEAR_WINDOW_KEY   = 'l'
 
 ### Text Drawing Parameters 
 FONT = cv2.FONT_HERSHEY_SIMPLEX 
-FONTSCALE = 1 
+FONTSCALE = .5
 COLOR = (0, 0, 0) 
 THICKNESS = 2
 LINE_STYLE = cv2.LINE_AA
 
-#cv2.putText(image, 'OpenCV', org, font, fontScale, color, thickness, cv2.LINE_AA) 
+class textObject():
+
+    def __init__(self, origin, lines):
+        self.origin = origin
+        self.lines = lines
    
 
 class CardClassifier():
@@ -51,6 +56,7 @@ class CardClassifier():
     def __init__(self):
         self.cataloger = CardCataloger()
         self.openWindows = []
+        self.textToWrite = []
 
     def startVideo(self):
         self.cap = cv2.VideoCapture(VIDEO_INPUT)
@@ -60,6 +66,7 @@ class CardClassifier():
 
             cardContours = self.detectCardContours(frame)
             self.drawCardContoursOnFrame(frame, cardContours)
+            self.putTextOnFrame(frame)
             cv2.imshow('frame', frame)
             
             self.checkForKeyPress()
@@ -77,8 +84,6 @@ class CardClassifier():
         edgesFilteredImg = cv2.dilate(edgesImg, kernel)
         edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_OPEN, kernel, iterations= 1)
         edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_CLOSE, kernel, iterations= 1)
-        cv2.imshow('canny', edgesImg)
-        cv2.imshow('cannyFiltered', edgesFilteredImg)
         _, contours, heirarchy = cv2.findContours(edgesFilteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
                                                                                                                     # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
                                                                                                                     # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
@@ -102,18 +107,26 @@ class CardClassifier():
         cv2.drawContours(frame, cards, -1, CONTOUR_COLOR, CONTOUR_THICKNESS)                 # -1 means to draw all card contours
         self.isolatedCardImages = [self.isolateCardImage(cardContour, frame) for cardContour in cards] 
 
-            
+    def putTextOnFrame(self, frame):
+        for textObject in self.textToWrite:
+            for i, line in enumerate(textObject.lines):
+                x, y = textObject.origin[0], textObject.origin[1] + (i + 1) * 20
+                cv2.putText(frame, line, (x, y), FONT, FONTSCALE, COLOR, THICKNESS, LINE_STYLE)
+        
     def checkForKeyPress(self):
         keyVal = cv2.waitKey(1)
 
         if keyVal == ord(QUIT_KEY):
             self.quit()
+        elif keyVal == ord(CLEAR_OVERLAY_KEY):
+            self.textToWrite = []
         elif keyVal == ord(COMPARE_KEY):
             self.clearAllExtraWindows()
-            self.compare()
+            self.compare(True)
         elif keyVal == ord(CATALOG_KEY):
             self.clearAllExtraWindows()
-            self.catalogue()
+            self.textToWrite = []
+            self.catalogue(False)
         elif keyVal == ord(CLEAR_WINDOW_KEY):
             self.clearAllExtraWindows()
 
@@ -130,17 +143,18 @@ class CardClassifier():
         for window in self.openWindows:
             cv2.destroyWindow(window)
 
-    def compare(self):
+    def compare(self, showMatches):
         print('Comparing detected cards to database..')
         matches = []
         for i, elem in enumerate(self.isolatedCardImages):
-            image, maxWidth, maxHeight = elem
-            matches.append(self.findImageMatch(image, maxWidth, maxHeight))
+            image, origin, maxWidth, maxHeight = elem
+            name, cardImage = self.findImageMatch(image, maxWidth, maxHeight, showMatches)
+            matches.append([name, cardImage, origin])
         print('Finished comparing cards')
         matches = [match for match in matches if match[0] is not None]
         return matches
             
-    def findImageMatch(self, capturedImage, maxWidth, maxHeight):
+    def findImageMatch(self, capturedImage, maxWidth, maxHeight, showPic):
         surf = cv2.xfeatures2d.SURF_create()
         flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
         testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
@@ -159,10 +173,10 @@ class CardClassifier():
                 cardName = testIMG.split('.')[0]
                 bestKeyPoints = keyPoints
                 bestSetofMatches = goodMatches
-                print("Enough matches are found in %s - %d/%d" % (testIMG, len(goodMatches), MIN_MATCH_COUNT))
+                if showPic: print("Enough matches are found in %s - %d/%d" % (testIMG, len(goodMatches), MIN_MATCH_COUNT))
 
-        if bestCardImage is not None: self.displayMatch(cardName, capturedImage, bestCardImage, testKeyPoints, bestKeyPoints, bestSetofMatches)
-        else: print("No good matches")
+        if bestCardImage is not None and showPic: self.displayMatch(cardName, capturedImage, bestCardImage, testKeyPoints, bestKeyPoints, bestSetofMatches)
+        elif showPic: print("No good matches")
         
         return cardName, bestCardImage
 
@@ -178,13 +192,20 @@ class CardClassifier():
         cv2.imshow('match for {}'.format(nameOfCard), imgOfMatches)
         self.openWindows.append('match for {}'.format(nameOfCard))
     
-    def catalogue(self):
+    def catalogue(self, showPic):
         print('Comparing then cataloguing cards..')
-        matches = self.compare()
+        matches = self.compare(showPic)
         names = [elem[0] for elem in matches]
+        print(names)
         if len(names) == 0:
             print('No recognizable cards to catalogue..')
         else:
+            for match in matches:
+                name, origin = match[0], match[2]
+                print(origin)
+                rarity, price, cardSet = self.cataloger.getCardStats(name)
+                text = textObject(origin, ["Name: {}".format(name), "Rarity: {}".format(rarity), "Price: {}".format(price), "Set: {}".format(cardSet)])
+                self.textToWrite.append(text)
             self.cataloger.logCards(names)
             print('Finished writing cards to catalogue')
 
@@ -226,7 +247,7 @@ class CardClassifier():
         transformationMatrix = cv2.getPerspectiveTransform(rect, dst)
         frameCopy = frame.copy()
         warpedImg = cv2.warpPerspective(frameCopy, transformationMatrix, (maxWidth, maxHeight))
-        return warpedImg, maxWidth, maxHeight
+        return warpedImg, [int(num) for num in rect[0]], maxWidth, maxHeight
     
 if __name__ == "__main__":
     classifier = CardClassifier()

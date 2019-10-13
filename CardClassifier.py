@@ -9,12 +9,12 @@ from CardCataloger import CardCataloger
 VIDEO_INPUT = 0 # What camera we will pull video input from
 
 ### Defines for edge detection parameters 
-THRESHOLDING_CUTOFF = 130
+THRESHOLDING_CUTOFF = 70
 ESTIMATION_ACCURACY = .04
 
 ### Min and max area values for possible cards detected
 CARD_MAX_AREA_THRESHOLD = 75000
-CARD_MIN_AREA_THRESHOLD = 18000
+CARD_MIN_AREA_THRESHOLD = 19000
 
 ### Min and max aspect ratios a cards dimensions could take on
 MIN_ASPECT_RATIO = 1.0
@@ -35,6 +35,16 @@ QUIT_KEY         = 'q'
 COMPARE_KEY      = 'c'
 CATALOG_KEY      = 'g'
 CLEAR_WINDOW_KEY = 'l'
+
+### Text Drawing Parameters 
+FONT = cv2.FONT_HERSHEY_SIMPLEX 
+FONTSCALE = 1 
+COLOR = (0, 0, 0) 
+THICKNESS = 2
+LINE_STYLE = cv2.LINE_AA
+
+#cv2.putText(image, 'OpenCV', org, font, fontScale, color, thickness, cv2.LINE_AA) 
+   
 
 class CardClassifier():
 
@@ -62,20 +72,16 @@ class CardClassifier():
 
     def detectAllContours(self, frame):
         grayImg = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        _, thresholdedImg = cv2.threshold(grayImg, THRESHOLDING_CUTOFF, 255, cv2.THRESH_BINARY)                # 255 means anyone above the cutoff is pushed up to be white
-        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(10,10))
-        cv2.imshow('thresholed', thresholdedImg)
-        filteredImg = thresholdedImg
-        filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_OPEN, kernel)
-        filteredImg = cv2.morphologyEx(filteredImg, cv2.MORPH_CLOSE, kernel)
-        edges = cv2.Canny(frame,100,200)
-        edgesFiltered = cv2.Canny(filteredImg,100,200)
-        cv2.imshow('filtered', filteredImg)
-        cv2.imshow('canny', edges)
-        cv2.imshow('cannyFiltered', edgesFiltered)
-        _, contours, heirarchy = cv2.findContours(filteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
-                                                                                                               # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
-                                                                                                               # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
+        kernel = cv2.getStructuringElement(cv2.MORPH_RECT,(5, 5))
+        edgesImg = cv2.Canny(grayImg, 100, 200)
+        edgesFilteredImg = cv2.dilate(edgesImg, kernel)
+        edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_OPEN, kernel, iterations= 1)
+        edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_CLOSE, kernel, iterations= 1)
+        cv2.imshow('canny', edgesImg)
+        cv2.imshow('cannyFiltered', edgesFilteredImg)
+        _, contours, heirarchy = cv2.findContours(edgesFilteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
+                                                                                                                    # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
+                                                                                                                    # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
         return contours
 
     def extractOnlyCardContours(self, contours):
@@ -90,7 +96,7 @@ class CardClassifier():
     def isCardContour(self, contour, verticies):
         startX, startY, width, height = cv2.boundingRect(verticies)
         aspectRatio = width / float(height)
-        return (cv2.contourArea(contour) > CARD_MIN_AREA_THRESHOLD and cv2.contourArea(contour) < CARD_MAX_AREA_THRESHOLD and len(verticies) == 4)
+        return (cv2.contourArea(contour) > CARD_MIN_AREA_THRESHOLD and cv2.contourArea(contour) < CARD_MAX_AREA_THRESHOLD)
     
     def drawCardContoursOnFrame(self, frame, cards):
         cv2.drawContours(frame, cards, -1, CONTOUR_COLOR, CONTOUR_THICKNESS)                 # -1 means to draw all card contours

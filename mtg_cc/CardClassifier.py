@@ -1,10 +1,10 @@
+#!/usr/bin/env python3
 ### Python library imports
 import cv2, os, sys
 import numpy as np
 
 ### Custom library imports
 from CardCataloger import CardCataloger
-
 
 VIDEO_INPUT = 0 # What camera we will pull video input from
 
@@ -43,6 +43,8 @@ FONTSCALE = .5
 COLOR = (0, 0, 0) 
 THICKNESS = 2
 LINE_STYLE = cv2.LINE_AA
+
+cv_maj_ver = cv2.__version__.split('.')[0]
 
 class textObject():
 
@@ -84,9 +86,13 @@ class CardClassifier():
         edgesFilteredImg = cv2.dilate(edgesImg, kernel)
         edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_OPEN, kernel, iterations= 1)
         edgesFilteredImg = cv2.morphologyEx(edgesFilteredImg, cv2.MORPH_CLOSE, kernel, iterations= 1)
-        _, contours, heirarchy = cv2.findContours(edgesFilteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
+        if cv_maj_ver == '3':
+            _, contours, heirarchy = cv2.findContours(edgesFilteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)     # RETR_TREE returns full family heirarchy of contours, heirarchy could be later used to cut off internal art or text box contours
                                                                                                                     # should test RETR_EXTERNAL here as this only returns outer contours not surrounded by others
                                                                                                                     # cv2.CHAIN_APPROX_SIMPLE tells it to only store the verticies in the contour instead of all points, saving memory
+        else:
+            contours, heirarchy = cv2.findContours(edgesFilteredImg, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+            
         return contours
 
     def extractOnlyCardContours(self, contours):
@@ -250,6 +256,8 @@ class CardClassifier():
         return warpedImg, [int(num) for num in rect[0]], maxWidth, maxHeight
     
 if __name__ == "__main__":
+    print("Running mtg_card_classifier")
+    print("OpenCV version: {0}".format(cv_maj_ver))
     classifier = CardClassifier()
     classifier.startVideo()
 

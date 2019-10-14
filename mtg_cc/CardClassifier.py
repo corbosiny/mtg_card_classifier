@@ -158,7 +158,7 @@ class CardClassifier():
         surf = cv2.xfeatures2d.SURF_create()
         flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
         testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
-        testImages = [im for im in os.listdir(os.getcwd()) if '.png' in im or '.jpg' in im]
+        testImages = [im for im in os.listdir(os.getcwd()+'/../data/img') if '.png' in im or '.jpg' in im] # Should be able to ignore the filetype
         bestCardImage, cardName, bestKeyPoints, bestSetofMatches = None, None, None, []
         
         for testIMG in testImages:

@@ -29,26 +29,27 @@ class CardCataloger():
 
     def logCards(self, names):
         print('Logging cards..')
-        self.cards = []
+        cards = []
         for name in names:
             print('Finding card statistics {0}..'.format(name))
             try:
-                self.addCardStats(name)
+                cards += self.getCardStats(name)
             except Exception as e:
                 print('Could not find card information on card {0}'.format(name))
         if not os.path.exists(COLLECTION_FILE_NAME):
             self.initCollectionFile()
             
-        self.addCardsToCollection(self.cards)
+        self.addCardsToCollection(cards)
 
-    def addCardStats(self, name):
+    def getCardStats(self, name):
         if USE_API:
+            output = []
             card_request = rq.get("https://api.scryfall.com/cards/search?q=%21%22{0}%22".format(name))
             time.sleep(0.05) # Scryfall asks for 50ms between requests
-            for ea_card_info in card_request.json()['data']:
-                self.cards.append([name, ea_card_info['rarity'], ea_card_info['prices']['usd'], ea_card_info['set']])
+            for ea_card_info in card_request.json()['data']: # For multiple cards of the same name
+                output.append([name, ea_card_info['rarity'], ea_card_info['prices']['usd'], ea_card_info['set']])
                 # Maybe rarity should be single letter instead of full word?
-            return    
+            return output 
         else:
             for rowIndex in range(self.priceSheet.nrows):
                 row = self.priceSheet.row(rowIndex)
@@ -61,8 +62,7 @@ class CardCataloger():
                     print('Price: {0}'.format(price))
                     setOrigin = row[SET_COLUMN].value
                     print('Set: {0}'.format(setOrigin))
-                    self.cards.append([name, rarity, price, setOrigin])
-                    return
+                    return [[name, rarity, price, setOrigin]]
 
 ##    def getCardStats(self):
 ##        pass # Enter code to connect to web server

@@ -203,8 +203,8 @@ class CardClassifier():
             for match in matches:
                 name, origin = match[0], match[2]
                 print(origin)
-                rarity, price, cardSet = self.cataloger.getCardStats(name)
-                text = textObject(origin, ["Name: {}".format(name), "Rarity: {}".format(rarity), "Price: {}".format(price), "Set: {}".format(cardSet)])
+                card_info = self.cataloger.getCardStats(name)[0]
+                text = textObject(origin, ["Name: {}".format(card_info[0]), "Rarity: {}".format(card_info[1]), "Price: {}".format(card_info[2]), "Set: {}".format(card_info[3])])
                 self.textToWrite.append(text)
             self.cataloger.logCards(names)
             print('Finished writing cards to catalogue')

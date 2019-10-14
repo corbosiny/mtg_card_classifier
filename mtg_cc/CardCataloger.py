@@ -17,6 +17,7 @@ else:
     SET_COLUMN            = 3
 
 COLLECTION_FILE_NAME        = '../data/Magic_Card_Collection.csv'
+IMAGES_DIR_NAME             = '../data/img/'
 FILE_HEADERS          = ['NAME', 'RARITY', 'PRICE', 'SET']
 
 
@@ -33,7 +34,7 @@ class CardCataloger():
         for name in names:
             print('Finding card statistics {0}..'.format(name))
             try:
-                cards += self.getCardStats(name)
+                cards += self.getCardStats(name, get_image = True)
             except Exception as e:
                 print('Could not find card information on card {0}'.format(name))
         if not os.path.exists(COLLECTION_FILE_NAME):
@@ -41,14 +42,24 @@ class CardCataloger():
             
         self.addCardsToCollection(cards)
 
-    def getCardStats(self, name):
+    def getCardStats(self, name, get_image = False):
         if USE_API:
             output = []
-            card_request = rq.get("https://api.scryfall.com/cards/search?q=%21%22{0}%22".format(name))
+            card_request = rq.get("https://api.scryfall.com/cards/search?q=%21%22{0}%22&order=released&unique=art".format(name))
             time.sleep(0.05) # Scryfall asks for 50ms between requests
-            for ea_card_info in card_request.json()['data']: # For multiple cards of the same name
-                output.append([name, ea_card_info['rarity'], ea_card_info['prices']['usd'], ea_card_info['set']])
+            card_list = card_request.json()['data']
+            i = 0
+            print("{0} variant(s) found".format(len(card_list)))
+            for ea_card_info in card_list: # For multiple cards of the same name
+                output.append([ea_card_info['name'], ea_card_info['rarity'], ea_card_info['prices']['usd'], ea_card_info['set']])
                 # Maybe rarity should be single letter instead of full word?
+                if get_image:
+                    card_image_request = rq.get(ea_card_info['image_uris']['normal'], stream=True) # Maybe use small instead of normal if it can handle it?
+                    if card_image_request.status_code == 200:
+                        with open(IMAGES_DIR_NAME + ea_card_info['name'] + ' (' + str(i)  + ')' + '.jpg', 'wb') as f:
+                            for chunk in card_image_request.iter_content(1024):
+                                f.write(chunk)
+                        i+=1
             return output 
         else:
             for rowIndex in range(self.priceSheet.nrows):

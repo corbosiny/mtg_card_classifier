@@ -1,1 +1,3 @@
 __pycache__/
+data/img/*
+data/Magic_Card_Collection.csv

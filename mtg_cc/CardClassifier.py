@@ -148,7 +148,7 @@ class CardClassifier():
         matches = []
         for i, elem in enumerate(self.isolatedCardImages):
             image, origin, maxWidth, maxHeight = elem
-            name, cardImage = self.findImageMatch(image, maxWidth, maxHeight, showMatches)
+            name, cardImage = self.findImageMatch(cv2.cvtColor(image, cv2.COLOR_BGR2GRAY), maxWidth, maxHeight, showMatches)
             matches.append([name, cardImage, origin])
         print('Finished comparing cards')
         matches = [match for match in matches if match[0] is not None]
@@ -157,10 +157,10 @@ class CardClassifier():
     def findImageMatch(self, capturedImage, maxWidth, maxHeight, showPic):
         surf = cv2.xfeatures2d.SURF_create()
         flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
-        testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
         testImages = [im for im in os.listdir(os.getcwd()+'/../data/img') if '.png' in im or '.jpg' in im] # Should be able to ignore the filetype
+        testImages = [os.path.join(os.getcwd()+'/../data/img', im) for im in testImages]
         bestCardImage, cardName, bestKeyPoints, bestSetofMatches = None, None, None, []
-        
+        testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
         for testIMG in testImages:
             img = cv2.imread(testIMG, 0)
             keyPoints, descriptions = surf.detectAndCompute(img, None)
@@ -170,7 +170,7 @@ class CardClassifier():
 
             if len(goodMatches) >= MIN_MATCH_COUNT and len(goodMatches) > len(bestSetofMatches):
                 bestCardImage = img
-                cardName = testIMG.split('.')[0]
+                cardName = testIMG.split('\\')[-1].split('.')[0]
                 bestKeyPoints = keyPoints
                 bestSetofMatches = goodMatches
                 if showPic: print("Enough matches are found in %s - %d/%d" % (testIMG, len(goodMatches), MIN_MATCH_COUNT))
@@ -203,7 +203,10 @@ class CardClassifier():
             for match in matches:
                 name, origin = match[0], match[2]
                 print(origin)
-                rarity, price, cardSet = self.cataloger.getCardStats(name)
+                try:
+                    rarity, price, cardSet = self.cataloger.getCardStats(name)
+                except:
+                    rarity, price, cardSet = '?', '?', '?'
                 text = textObject(origin, ["Name: {}".format(name), "Rarity: {}".format(rarity), "Price: {}".format(price), "Set: {}".format(cardSet)])
                 self.textToWrite.append(text)
             self.cataloger.logCards(names)

@@ -1,7 +1,7 @@
 import xlrd, csv, os
 
-CATALOG_NAME                = 'Magic_Card_Catalog.xlsx'
-COLLECTION_FILE_NAME        = 'Magic_Card_Collection.csv'
+CATALOG_NAME                = '../data/Magic_Card_Catalog.xlsx'
+COLLECTION_FILE_NAME        = '../data/Magic_Card_Collection.csv'
 PRICE_SHEET_NAME            = 'price_sheet' 
 
 FILE_HEADERS          = ['NAME', 'RARITY', 'PRICE', 'SET']

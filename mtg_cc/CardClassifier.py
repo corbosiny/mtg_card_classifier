@@ -157,8 +157,8 @@ class CardClassifier():
     def findImageMatch(self, capturedImage, maxWidth, maxHeight, showPic):
         surf = cv2.xfeatures2d.SURF_create()
         flann = cv2.FlannBasedMatcher(INDEX_PARAMS, SEARCH_PARAMS)
-        testImages = [im for im in os.listdir(os.getcwd()+'/../data/img') if '.png' in im or '.jpg' in im] # Should be able to ignore the filetype
-        testImages = [os.path.join(os.getcwd()+'/../data/img', im) for im in testImages]
+        testImages = [im for im in os.listdir(os.getcwd()+'/../data/testImages') if '.png' in im or '.jpg' in im] # Should be able to ignore the filetype
+        testImages = [os.path.join(os.getcwd()+'/../data/testImages', im) for im in testImages]
         bestCardImage, cardName, bestKeyPoints, bestSetofMatches = None, None, None, []
         testKeyPoints, testDescriptions = surf.detectAndCompute(capturedImage, None)
         for testIMG in testImages:
@@ -196,20 +196,18 @@ class CardClassifier():
         print('Comparing then cataloguing cards..')
         matches = self.compare(showPic)
         names = [elem[0] for elem in matches]
-        print(names)
         if len(names) == 0:
             print('No recognizable cards to catalogue..')
         else:
             for match in matches:
                 name, origin = match[0], match[2]
-                print(origin)
                 try:
-                    rarity, price, cardSet = self.cataloger.getCardStats(name)
+                    _, rarity, price, cardSet = self.cataloger.getCardStats(name)
                 except:
                     rarity, price, cardSet = '?', '?', '?'
                 text = textObject(origin, ["Name: {}".format(name), "Rarity: {}".format(rarity), "Price: {}".format(price), "Set: {}".format(cardSet)])
                 self.textToWrite.append(text)
-            self.cataloger.logCards(names)
+            self.cataloger.logCards(names, True)
             print('Finished writing cards to catalogue')
 
     def isolateCardImage(self, cardContour, frame):
